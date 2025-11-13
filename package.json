@@ -8,7 +8,10 @@
     "jwt",
     "auth",
     "cors",
-    "error-handling"
+    "error-handling",
+    "security",
+    "helmet",
+    "zod"
   ],
   "license": "MIT",
   "type": "module",
@@ -28,6 +31,14 @@
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aswanyaugustine123/framework-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aswanyaugustine123/framework-guard/issues"
+  },
+  "homepage": "https://github.com/aswanyaugustine123/framework-guard#readme",
   "scripts": {
     "build": "tsup src/index.ts --dts --format cjs,esm --sourcemap --clean",
     "dev": "tsup src/index.ts --format cjs,esm --out-extension cjs=.cjs --out-extension esm=.mjs --dts --watch",

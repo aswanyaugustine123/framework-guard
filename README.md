@@ -1,6 +1,10 @@
 # framework-guard
 
-Toolkit for building HTTP middleware with a focus on Express: JWT auth, consistent error handling, and response helpers.
+[![npm version](https://img.shields.io/npm/v/framework-guard.svg)](https://www.npmjs.com/package/framework-guard)
+![types](https://img.shields.io/badge/types-TypeScript-blue)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+Toolkit for building HTTP middleware with a focus on Express: JWT auth, consistent error handling, response helpers, security headers, request IDs/logging, and schema validation.
 
 ## Installation
 
