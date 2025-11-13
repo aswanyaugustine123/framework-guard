@@ -1,14 +1,53 @@
-import type { Request, Response, NextFunction, RequestHandler, ErrorRequestHandler } from 'express';
 import cors, { type CorsOptions } from 'cors';
+import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from 'express';
 import helmet, { type HelmetOptions } from 'helmet';
 import type jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 import type { ZodSchema } from 'zod';
-import { defaultGetToken, verifyJwt } from './core/auth';
+import { defaultGetToken, verifyJwt, type JwtPayload } from './core/auth';
+import { ErrorCodes } from './core/codes';
 import { AppError, toHttpError } from './core/error';
 import { jsonError } from './core/response';
-import { ErrorCodes } from './core/codes';
 
-export interface JwtAuthOptions<TUser = any> {
+type MutableRequest = Request & Record<string, unknown>;
+type RequestSection = 'body' | 'query' | 'params';
+
+const asMutableRequest = (req: Request): MutableRequest => req as MutableRequest;
+
+const setRequestSection = (req: Request, section: RequestSection, value: unknown): void => {
+  asMutableRequest(req)[section] = value;
+};
+
+const readRequestSection = (req: Request, section: RequestSection): unknown => {
+  return asMutableRequest(req)[section];
+};
+
+const setRequestProperty = (req: Request, property: string, value: unknown): void => {
+  asMutableRequest(req)[property] = value;
+};
+
+const getRequestProperty = <T>(req: Request, property: string): T | undefined => {
+  return asMutableRequest(req)[property] as T | undefined;
+};
+
+const readHeaderValue = (req: Request, headerName: string): string | undefined => {
+  const direct = req.get(headerName);
+  if (direct) return direct;
+  const raw = req.headers[headerName.toLowerCase()];
+  if (Array.isArray(raw)) return raw[0];
+  if (typeof raw === 'string') return raw;
+  return undefined;
+};
+
+const randomId = (): string => {
+  try {
+    return randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+};
+
+export interface JwtAuthOptions {
   secret: jwt.Secret;
   algorithms?: jwt.Algorithm[];
   credentialsRequired?: boolean; // default true
@@ -16,7 +55,7 @@ export interface JwtAuthOptions<TUser = any> {
   requestProperty?: string; // default 'user'
 }
 
-export function jwtAuth<TUser = any>(options: JwtAuthOptions<TUser>): RequestHandler {
+export function jwtAuth<TPayload = JwtPayload>(options: JwtAuthOptions): RequestHandler {
   const {
     secret,
     algorithms,
@@ -32,8 +71,8 @@ export function jwtAuth<TUser = any>(options: JwtAuthOptions<TUser>): RequestHan
       return next();
     }
     try {
-      const payload = verifyJwt<TUser>(token, secret, { algorithms });
-      (req as any)[requestProperty] = payload;
+      const payload = verifyJwt<TPayload>(token, secret, { algorithms });
+      setRequestProperty(req, requestProperty, payload);
       return next();
     } catch {
       return next(new AppError('Invalid token', 401, ErrorCodes.INVALID_TOKEN));
@@ -74,69 +113,73 @@ export function requestId(options: RequestIdOptions = {}): RequestHandler {
   const {
     header = 'X-Request-Id',
     trustIncoming = true,
-    generator = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+    generator = randomId,
     requestProperty = 'id',
   } = options;
 
-  const headerLower = header.toLowerCase();
-
   return function requestIdMiddleware(req: Request, res: Response, next: NextFunction) {
-    const incoming = (req.headers as any)[headerLower] as string | undefined;
-    const id = trustIncoming && incoming ? String(incoming) : generator();
-    (req as any)[requestProperty] = id;
+    const incoming = trustIncoming ? readHeaderValue(req, header) : undefined;
+    const id = incoming ?? generator();
+    setRequestProperty(req, requestProperty, id);
     res.setHeader(header, id);
     next();
   };
 }
 
+export interface LoggerLike {
+  info?: (payload: Record<string, unknown>, message?: string) => void;
+  warn?: (...args: unknown[]) => void;
+  error?: (...args: unknown[]) => void;
+}
+
 export interface LogRequestsOptions {
   header?: string; // request id header name
-  logger?: { info: (...args: any[]) => void; error?: (...args: any[]) => void; warn?: (...args: any[]) => void };
-  level?: 'info' | 'debug';
+  logger?: LoggerLike;
 }
 
 export function logRequests(options: LogRequestsOptions = {}): RequestHandler {
   const { header = 'X-Request-Id', logger = console } = options;
-  const headerLower = header.toLowerCase();
   return function logRequestsMiddleware(req: Request, res: Response, next: NextFunction) {
     const start = Date.now();
-    const id = ((req as any).id as string) || ((req.headers as any)[headerLower] as string) || undefined;
     res.on('finish', () => {
       const duration = Date.now() - start;
       const status = res.statusCode;
-      logger.info?.({ id, method: req.method, url: req.originalUrl || req.url, status, duration }, 'request');
+      const id = getRequestProperty<string>(req, 'id') ?? readHeaderValue(req, header);
+      logger.info?.({ id, method: req.method, url: req.originalUrl ?? req.url, status, duration }, 'request');
     });
     next();
   };
 }
 
-export interface ValidateSchemas<TBody = any, TQuery = any, TParams = any> {
+type ValidationIssue = { path: (string | number)[]; message: string };
+type ValidationDetails = Partial<Record<RequestSection, ValidationIssue[]>>;
+
+export interface ValidateSchemas<TBody = unknown, TQuery = unknown, TParams = unknown> {
   body?: ZodSchema<TBody>;
   query?: ZodSchema<TQuery>;
   params?: ZodSchema<TParams>;
 }
 
-export function validate<TBody = any, TQuery = any, TParams = any>(schemas: ValidateSchemas<TBody, TQuery, TParams>): RequestHandler {
+export function validate<TBody = unknown, TQuery = unknown, TParams = unknown>(
+  schemas: ValidateSchemas<TBody, TQuery, TParams>
+): RequestHandler {
   return function validateMiddleware(req: Request, _res: Response, next: NextFunction) {
-    const details: any = {};
+    const details: ValidationDetails = {};
+
+    const applySchema = <T>(schema: ZodSchema<T>, section: RequestSection) => {
+      const parsed = schema.safeParse(readRequestSection(req, section));
+      if (!parsed.success) {
+        details[section] = parsed.error.issues.map(({ path, message }) => ({ path, message }));
+        return;
+      }
+      setRequestSection(req, section, parsed.data);
+    };
 
     try {
-      if (schemas.body) {
-        const parsed = schemas.body.safeParse((req as any).body);
-        if (!parsed.success) details.body = parsed.error.issues.map(i => ({ path: i.path, message: i.message }));
-        else (req as any).body = parsed.data;
-      }
-      if (schemas.query) {
-        const parsed = schemas.query.safeParse((req as any).query);
-        if (!parsed.success) details.query = parsed.error.issues.map(i => ({ path: i.path, message: i.message }));
-        else (req as any).query = parsed.data as any;
-      }
-      if (schemas.params) {
-        const parsed = schemas.params.safeParse((req as any).params);
-        if (!parsed.success) details.params = parsed.error.issues.map(i => ({ path: i.path, message: i.message }));
-        else (req as any).params = parsed.data as any;
-      }
-    } catch (e) {
+      if (schemas.body) applySchema(schemas.body, 'body');
+      if (schemas.query) applySchema(schemas.query, 'query');
+      if (schemas.params) applySchema(schemas.params, 'params');
+    } catch {
       return next(new AppError('Validation failed', 400, ErrorCodes.VALIDATION));
     }
 

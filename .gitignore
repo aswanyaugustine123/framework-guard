@@ -3,12 +3,19 @@ node_modules/
 
 # Build output
 dist/
+coverage/
+.turbo/
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Build artifacts
+*.tsbuildinfo
+.eslintcache
+*.tgz
 
 # Environment files
 .env
@@ -18,3 +25,4 @@ pnpm-debug.log*
 
 # Editor settings
 .vscode/
+.idea/

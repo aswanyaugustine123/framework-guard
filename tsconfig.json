@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "outDir": "dist",
@@ -8,13 +8,14 @@
     "strict": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true,
+    "lib": ["ES2022"],
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
-    "types": ["node", "express"]
+    "types": ["node", "express"],
+    "noEmitOnError": true
   },
   "include": ["src"]
 }
-

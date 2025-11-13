@@ -21,8 +21,12 @@ export class AppError extends Error {
   }
 }
 
+type ErrorLike = { name?: unknown };
+
 export function isAppError(err: unknown): err is AppError {
-  return Boolean(err) && typeof err === 'object' && (err as any).name === 'AppError';
+  if (err instanceof AppError) return true;
+  if (!err || typeof err !== 'object') return false;
+  return (err as ErrorLike).name === 'AppError';
 }
 
 export function toHttpError(err: unknown): AppError {
@@ -30,4 +34,3 @@ export function toHttpError(err: unknown): AppError {
   if (err instanceof Error) return new AppError(err.message, 500);
   return new AppError('Internal Server Error', 500);
 }
-
