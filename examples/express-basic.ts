@@ -1,9 +1,13 @@
 import express from 'express';
-import { withCors, jwtAuth, notFound, errorHandler, signJwt } from '../src';
+import { z } from 'zod';
+import { withCors, withHelmet, requestId, logRequests, validate, jwtAuth, notFound, errorHandler, signJwt } from '../src';
 
 const app = express();
 app.use(express.json());
 app.use(withCors());
+app.use(withHelmet());
+app.use(requestId());
+app.use(logRequests());
 
 app.post('/login', (req, res) => {
   const { username } = req.body ?? {};
@@ -25,8 +29,13 @@ app.get('/api/me', (req, res) => {
   res.json({ success: true, data: { user: (req as any).user } });
 });
 
+// Example of validation with Zod
+const echoBody = z.object({ message: z.string().min(1) });
+app.post('/api/echo', validate({ body: echoBody }), (req, res) => {
+  res.json({ success: true, data: { body: req.body } });
+});
+
 app.use(notFound());
 app.use(errorHandler());
 
 app.listen(3000, () => console.log('listening on http://localhost:3000'));
-
