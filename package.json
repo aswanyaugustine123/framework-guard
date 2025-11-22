@@ -43,8 +43,8 @@
   "homepage": "https://github.com/aswanyaugustine123/framework-guard#readme",
   "scripts": {
     "clean": "rimraf dist",
-    "build": "npm run clean && tsup src/index.ts --dts --format cjs,esm --sourcemap --clean --target node22 --out-extension cjs=.cjs --out-extension esm=.mjs",
-    "dev": "tsup src/index.ts --format cjs,esm --out-extension cjs=.cjs --out-extension esm=.mjs --dts --watch --target node22",
+    "build": "npm run clean && tsup --config tsup.config.ts",
+    "dev": "tsup --config tsup.config.ts --watch",
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"examples/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "type-check": "npm run typecheck",
